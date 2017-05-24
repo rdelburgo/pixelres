@@ -1,0 +1,352 @@
+//Users/riccardodelburgo //
+// ********************************************************************
+// * License and Disclaimer                                           *
+// *                                                                  *
+// * The  Geant4 software  is  copyright of the Copyright Holders  of *
+// * the Geant4 Collaboration.  It is provided  under  the terms  and *
+// * conditions of the Geant4 Software License,  included in the file *
+// * LICENSE and available at  http://cern.ch/geant4/license .  These *
+// * include a list of copyright holders.                             *
+// *                                                                  *
+// * Neither the authors of this software system, nor their employing *
+// * institutes,nor the agencies providing financial support for this *
+// * work  make  any representation or  warranty, express or implied, *
+// * regarding  this  software system or assume any liability for its *
+// * use.  Please see the license in the file  LICENSE  and URL above *
+// * for the full disclaimer and the limitation of liability.         *
+// *                                                                  *
+// * This  code  implementation is the result of  the  scientific and *
+// * technical work of the GEANT4 collaboration.                      *
+// * By using,  copying,  modifying or  distributing the software (or *
+// * any work based  on the software)  you  agree  to acknowledge its *
+// * use  in  resulting  scientific  publications,  and indicate your *
+// * acceptance of all terms of the Geant4 Software license.          *
+// ********************************************************************
+//
+// $Id: B2aDetectorConstruction.cc 87359 2014-12-01 16:04:27Z gcosmo $
+//
+/// \file B2aDetectorConstruction.cc
+/// \brief Implementation of the B2aDetectorConstruction class
+//#include "B2aField.hh" 
+#include "B2aDetectorConstruction.hh"
+#include "B2aDetectorMessenger.hh"
+#include "B2TrackerSD.hh"
+#include "G4Material.hh"
+#include "G4NistManager.hh"
+#include "G4Box.hh"
+#include "G4Tubs.hh"
+#include "G4LogicalVolume.hh"
+#include "G4PVPlacement.hh"
+#include "G4GlobalMagFieldMessenger.hh"
+#include "G4UniformElectricField.hh"
+#include "G4MagIntegratorStepper.hh"
+#include "G4AutoDelete.hh"
+#include "G4GeometryTolerance.hh"
+#include "G4GeometryManager.hh"
+#include "G4FieldManager.hh"
+#include "G4TransportationManager.hh"
+#include "G4EqMagElectricField.hh"
+#include "G4ClassicalRK4.hh"
+#include "G4UserLimits.hh"
+#include "G4MagIntegratorDriver.hh"
+#include "G4VisAttributes.hh"
+#include "G4Colour.hh"
+#include "G4ElectricField.hh"
+#include "G4SystemOfUnits.hh"
+#include "G4Region.hh"
+#include "G4ProductionCuts.hh"
+#include "EMField.hh"
+//#include "B2aFieldMessenger.hh"
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+ 
+//G4ThreadLocal 
+//// G4GlobalMagFieldMessenger* B2aDetectorConstruction::fMagFieldMessenger = 0;
+//B2aFieldMessenger* B2aDetectorConstruction::fFieldMessenger = 0;
+// //G4ElectricField* fEMfield;
+G4ThreadLocal EMField* B2aDetectorConstruction::fField = 0;
+
+B2aDetectorConstruction::B2aDetectorConstruction()
+:G4VUserDetectorConstruction(), 
+ fNbOfChambers(0),
+ fpixelN(0),
+ //emField(0),
+ fLogicChamber(NULL), fLogicPixel(NULL),
+ fChamberMaterial(NULL),fPixelMaterial(NULL), 
+ fStepLimit(NULL),
+ fCheckOverlaps(true)
+{
+  fMessenger = new B2aDetectorMessenger(this);
+  fNbOfChambers = 2;
+  frows=5;
+  fcolumns=5;
+  fpixelN=frows*fcolumns;
+  fLogicChamber = new G4LogicalVolume*[fNbOfChambers];
+  fLogicPixel = new G4LogicalVolume*[fpixelN];
+  //  emField= new B2aField();
+  //  emField->DefineUnits();
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+ 
+B2aDetectorConstruction::~B2aDetectorConstruction()
+{ 
+  //delete emField;
+  delete [] fLogicPixel;
+  delete [] fLogicChamber; 
+  delete fStepLimit;
+  delete fMessenger;
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+ 
+G4VPhysicalVolume* B2aDetectorConstruction::Construct()
+{
+  DefineMaterials();
+  return DefineVolumes();
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+void B2aDetectorConstruction::DefineMaterials()
+{
+  // Material definition 
+  G4NistManager* nistManager = G4NistManager::Instance();
+  nistManager->FindOrBuildMaterial("G4_AIR");
+  fChamberMaterial = nistManager->FindOrBuildMaterial("G4_Xe");
+  fPixelMaterial = nistManager->FindOrBuildMaterial("G4_Si");
+  G4cout << *(G4Material::GetMaterialTable()) << G4endl;
+  //fSiMaterial = Si;
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+void B2aDetectorConstruction::UpdateEMField()
+{
+  //  emField->SetFieldValue(mField,eField);
+  //  emField->GetGlobalFieldManager()->SetFieldChangesEnergy(true);
+  G4cout << "putipu" << G4endl;
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......                                                                              
+G4VPhysicalVolume* B2aDetectorConstruction::DefineVolumes()
+{
+  G4Material* air  = G4Material::GetMaterial("G4_AIR");
+  G4double worldLength =10*mm; 
+  G4double pixelXsize= 0.05*mm;//0.05*mm;
+  G4double pixelYsize= 0.05*mm;//0.05*mm;
+  G4double pixelXpitch= 2*pixelXsize;
+  G4double pixelYpitch= 2*pixelYsize;
+  G4double pixelThickness= 0.1*mm;//0.1*mm;
+  G4double offsetx= 0.0*mm;
+  G4double offsety= 0.0*mm;
+  G4double trackerLength = 0.2 *mm;//worldLength;//pixelThickness;
+  G4double trackerSize   = 0.2 *mm;//worldLength;//frows*pixelXpitch;
+ 
+  G4GeometryManager::GetInstance()->SetWorldMaximumExtent(worldLength);
+  G4cout << "Computed tolerance = "
+         << G4GeometryTolerance::GetInstance()->GetSurfaceTolerance()/mm
+         << " mm" << G4endl;
+  G4Box* worldS = new G4Box("world",                                    //its name
+			    worldLength/2,worldLength/2,worldLength/2); //its size
+  G4LogicalVolume* worldLV = new G4LogicalVolume(
+						 worldS,   //its solid
+						 air,      //its material
+						 "World"); //its name
+  
+  G4VPhysicalVolume* worldPV  = new G4PVPlacement(
+						  0,               // no rotation
+						  G4ThreeVector(), // at (0,0,0)
+						  worldLV,         // its logical volume
+						  "World",         // its name
+						  0,               // its mother  volume
+						  false,           // no boolean operations
+						  0,               // copy number
+						  fCheckOverlaps); // checking overlaps 
+
+  
+  G4ThreeVector positionTracker = G4ThreeVector(0,0,0);
+  G4Tubs* trackerS = new G4Tubs("tracker",0,trackerSize,trackerSize, 0.*deg, 360.*deg);
+  G4LogicalVolume* trackerLV = new G4LogicalVolume(trackerS, air, "Tracker",0,0,0);  
+  //}
+
+  new G4PVPlacement(0,               // no rotation
+		  positionTracker, // at (x,y,z)
+		  trackerLV,       // its logical volume
+		  "Tracker",       // its name
+		  worldLV,         // its mother  volume
+		  false,           // no boolean operations
+		  0,               // copy number
+		  fCheckOverlaps); // checking overlaps 
+  
+// Visualization attributes
+
+  G4VisAttributes* boxVisAtt= new G4VisAttributes(G4Colour(1.0,1.0,1.0));
+  //G4VisAttributes* chamberVisAtt = new G4VisAttributes(G4Colour(1.0,1.0,0.0));
+  G4VisAttributes* pixelVisAtt = new G4VisAttributes(G4Colour(0.0,1.0,1.0));
+  worldLV      ->SetVisAttributes(boxVisAtt);
+  trackerLV    ->SetVisAttributes(boxVisAtt);
+  fRegion = new G4Region("Target");
+  // Always return the physical world
+  for (G4int row=0; row<frows; row++) {
+    G4cout << "row number " << row << G4endl;
+    for (G4int column=0; column<fcolumns; column++) {
+    G4int copyNo=column+row*(fcolumns);
+    G4double Xposition = offsetx-fcolumns*pixelXpitch*0.5+ pixelXpitch*column;
+    G4double Yposition = offsety-frows*pixelYpitch*0.5+ pixelYpitch*row;
+    G4Box* PixelS= new G4Box("Pixel_solid"
+			     , pixelXsize
+			     , pixelYsize
+			     , pixelThickness);
+    G4cout << "pixel number " << copyNo<< G4endl;
+    fLogicPixel[copyNo] = new G4LogicalVolume(PixelS,
+					      fPixelMaterial,
+					      "Pixel_Module"
+					      ,0,0,0);
+    fLogicPixel[copyNo]->SetVisAttributes(pixelVisAtt);
+    G4bool allLocal = true;       
+      //STEPPER1
+    fRegion->AddRootLogicalVolume(fLogicPixel[copyNo]);
+    G4cout << "pixel number " << copyNo<< G4endl;
+    G4double phi = 45*deg;
+    //    u, v, w are the daughter axes, projected on the mother frame
+    G4ThreeVector u = G4ThreeVector(0, 0, -1);
+    G4ThreeVector v = G4ThreeVector(-std::sin(phi), std::cos(phi),0.);
+    G4ThreeVector w = G4ThreeVector( std::cos(phi), std::sin(phi),0.);
+    G4RotationMatrix *rotml = new G4RotationMatrix(u, v, w);
+    G4ThreeVector position0 = G4ThreeVector(Xposition,Yposition,0);
+    new G4PVPlacement(0,                            // no rotation                                                                                     
+                        position0, // at (x,y,z)                                                                           
+                        fLogicPixel[copyNo],        // its logical volume                                                                        
+                        "Pixel_PV",                 // its name                                                                                        
+                        trackerLV,                    // its mother  volume                                                                           
+                        false,                        // no boolean operations                                                                           
+                        copyNo,                       // copy number                                                                             
+                        fCheckOverlaps);              // checking overlaps                                                                               
+      G4cout << "pixel number " << copyNo<< G4endl;
+    }
+  }
+
+  G4ProductionCuts* cuts = new G4ProductionCuts();
+  G4double defCut = 1*nanometer;
+  cuts->SetProductionCut(defCut,"gamma");
+  cuts->SetProductionCut(defCut,"e-");
+  cuts->SetProductionCut(defCut,"e+");
+  cuts->SetProductionCut(defCut,"proton");
+  cuts->SetProductionCut(defCut,"mu-");
+  fRegion->SetProductionCuts(cuts);
+  G4double maxStep = pixelThickness/100;
+  fStepLimit = new G4UserLimits(maxStep);
+  trackerLV->SetUserLimits(fStepLimit);
+  return worldPV;
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+ 
+void B2aDetectorConstruction::ConstructSDandField()
+{
+  G4String PixelSDname = "B2/TrackerChamberSD";
+  B2TrackerSD* aTrackerSD = new B2TrackerSD(PixelSDname,
+					    "PixelHitsCollection");
+
+  SetSensitiveDetector("Pixel_Module",aTrackerSD,true);
+
+  if(!fField) fField = new EMField();
+/**
+  fEquation = new G4EqMagElectricField(fField);
+  fStepper = new G4ClassicalRK4 (fEquation,8);
+  fFieldMgr = G4TransportationManager::GetTransportationManager()->GetFieldManager();
+  fIntgrDriver = new G4MagInt_Driver(0.000001*mm,fStepper,fStepper->GetNumberOfVariables() );
+  fChordFinder = new G4ChordFinder(fIntgrDriver);
+  fFieldMgr->SetChordFinder(fChordFinder);
+  fFieldMgr->SetDetectorField(fField);
+  fFieldMgr->GetChordFinder()->SetDeltaChord(1e-9*m);
+  fFieldMgr->SetDeltaIntersection(1e-9*m);
+  fFieldMgr->SetDeltaOneStep(1e-9*m);
+
+  fPropInField =
+    G4TransportationManager::GetTransportationManager()->GetPropagatorInField();
+  fPropInField->SetMinimumEpsilonStep(1e-11);
+  fPropInField->SetMaximumEpsilonStep(1e-10);
+
+   **/
+  //  G4int copyNo=column+row*(fcolumns);
+  fEquation = new G4EqMagElectricField(fField);
+  fStepper = new G4ClassicalRK4 (fEquation,8);
+  //fFieldMgr = G4TransportationManager::GetTransportationManager()->GetFieldManager();     
+  fFieldMgr = new G4FieldManager();
+  fIntgrDriver = new G4MagInt_Driver(0.0001*mm,fStepper,fStepper->GetNumberOfVariables() ); 
+  fChordFinder = new G4ChordFinder(fIntgrDriver);                          
+  fFieldMgr->SetChordFinder(fChordFinder);      
+  //  fFieldMgr->SetFieldChangesEnergy(true);
+  fFieldMgr->SetDetectorField(fField);
+  /**
+  fPropInField =  G4TransportationManager::GetTransportationManager()->GetPropagatorInField();
+  fFieldMgr->GetChordFinder()->SetDeltaChord(1e-9*m);
+  //  fFieldMgr->SetDeltaIntersection(1e-9*m);
+  fFieldMgr->SetDeltaOneStep(1e-9*m);
+  fPropInField->SetMinimumEpsilonStep(1e-11);
+  fPropInField->SetMaximumEpsilonStep(1e-10);
+  **/
+  G4bool allLocal = true;   
+
+  for(int i=0; i<fpixelN;i++){
+  fLogicPixel[i]->SetFieldManager(fFieldMgr,allLocal);
+  }
+}
+
+
+void B2aDetectorConstruction::SetPixelMaterial(G4String materialName)
+{
+  G4NistManager* nistManager = G4NistManager::Instance();
+  G4Material* pttoMaterial =  nistManager->FindOrBuildMaterial(materialName);
+  if (fChamberMaterial != pttoMaterial) {
+    if ( pttoMaterial ) {
+      fChamberMaterial = pttoMaterial;
+      for (G4int copyNo=0; copyNo<fpixelN; copyNo++) {
+	if (fLogicPixel[copyNo]) fLogicPixel[copyNo]->SetMaterial(fPixelMaterial);
+      }
+      G4cout
+	<< G4endl
+	<< "----> The pixels are made of " << materialName << G4endl;
+    } else {
+      G4cout
+	<< G4endl
+	<< "-->  WARNING from SetpixelMaterial : "
+	<< materialName << " not found" << G4endl;
+    }
+  }
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+void B2aDetectorConstruction::SetMaxStep(G4double maxStep)
+{
+  if ((fStepLimit)&&(maxStep>0.)) fStepLimit->SetMaxAllowedStep(maxStep);
+}
+
+//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+
+void B2aDetectorConstruction::SetCheckOverlaps(G4bool checkOverlaps)
+{
+  fCheckOverlaps = checkOverlaps;
+}  
+
+void B2aDetectorConstruction::SetEleField(G4ThreeVector eVector)
+{
+  eField = eVector;
+}
+
+////////////////////////////////////////////////////////////////
+/// Setting the uniform magnetic field vector
+void B2aDetectorConstruction::SetMagField(G4ThreeVector mVector)
+{
+  mField = mVector;
+}
+/**
+void B2aDetectorConstruction::SetField(G4ThreeVector mVector, G4ThreeVector eVector)
+{
+  eField = eVector;
+  mField = mVector;
+  
+}
+**/

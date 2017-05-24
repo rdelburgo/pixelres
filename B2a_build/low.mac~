@@ -1,0 +1,13 @@
+# Initialize kernel
+/run/initialize
+/tracking/verbose 1
+#/hits/verbose 2
+#/run/beamOn 1
+#/globalField/verbose 1
+#/globalField/setValue 0.2 0 0 tesla
+/B2a/det/setEleField 0 0 1 #(in MV/mm)
+/B2a/det/setMagField 1 1 0 tesla #()
+
+/gun/particle mu-
+/gun/energy 1000 MeV
+/run/beamOn 1
